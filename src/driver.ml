@@ -1254,3 +1254,12 @@ let () =
 let enable_checks () =
   perform_checks := true;
   perform_checks_on_extensions := true
+
+let () =
+  Deriving.Deriving_private.init
+    (module struct
+      let add_arg = add_arg
+      let pretty = pretty
+      let register_transformation ?extensions ?aliases name =
+        register_transformation ?extensions ?aliases name
+    end)

@@ -1,13 +1,29 @@
 open Import
 open Ast_builder.Default
 
+module type Driver = sig
+  val add_arg : Caml.Arg.key -> Caml.Arg.spec -> doc:string -> unit
+  val pretty : unit -> bool
+
+  val register_transformation
+    :  ?extensions : Extension.t list
+    -> ?aliases    : string list
+    -> string
+    -> unit
+end
+
+let driver : (module Driver) option ref = ref None
+let get_driver () = Option.value_exn !driver
+
 (* [do_insert_unused_warning_attribute] -- If true, generated code
    contains compiler attribute to disable unused warnings, instead of
    inserting [let _ = ... ]. *)
 let do_insert_unused_warning_attribute = ref false
 let keep_w32_impl = ref false
 let keep_w32_intf = ref false
-let () =
+
+let init_args () =
+  let (module Driver) = get_driver () in
   let keep_w32_spec =
     Caml.Arg.Symbol
       (["impl"; "intf"; "both"],
@@ -40,8 +56,12 @@ let () =
     conv_w32_spec
     ~doc:" Deprecated, use -deriving-disable-w32-method"
 
-let keep_w32_impl () = !keep_w32_impl || Driver.pretty ()
-let keep_w32_intf () = !keep_w32_intf || Driver.pretty ()
+let keep_w32_impl () =
+  let (module Driver) = get_driver () in
+  !keep_w32_impl || Driver.pretty ()
+let keep_w32_intf () =
+  let (module Driver) = get_driver () in
+  !keep_w32_intf || Driver.pretty ()
 
 module List = struct
   include List
@@ -385,8 +405,9 @@ module Deriver = struct
      | None -> ()
      | Some f ->
        let extension = Extension.declare name Expression Ast_pattern.(ptyp __) f in
+       let (module Driver) = get_driver () in
        Driver.register_transformation ("Ppxlib.Deriving." ^ name)
-         ~rules:[ Context_free.Rule.extension extension ]);
+         ~extensions:[ extension ]);
     name
   ;;
 
@@ -489,7 +510,7 @@ let mk_deriving_attr context ~prefix ~suffix =
     (fun x -> x)
 ;;
 
-module Attr = struct
+module Attrs = struct
   let suffix = ""
   let td = mk_deriving_attr ~prefix:"ppxlib." ~suffix Type_declaration
   let te = mk_deriving_attr ~prefix:"ppxlib." ~suffix Type_extension
@@ -627,46 +648,92 @@ let expand_sig_type_ext ~loc ~path te generators =
   let generated = Generator.apply_all ~loc ~path te generators in
   disable_unused_warning_sig ~loc generated
 
-let () =
-  Driver.register_transformation "deriving"
-    ~aliases:["type_conv"]
-    ~rules:[ Context_free.Rule.attr_str_type_decl
-               Attr.td
-               expand_str_type_decls
-           ; Context_free.Rule.attr_sig_type_decl
-               Attr.td
-               expand_sig_type_decls
-           ; Context_free.Rule.attr_str_type_ext
-               Attr.te
-               expand_str_type_ext
-           ; Context_free.Rule.attr_sig_type_ext
-               Attr.te
-               expand_sig_type_ext
-           ; Context_free.Rule.attr_str_exception
-               Attr.ec
-               expand_str_exception
-           ; Context_free.Rule.attr_sig_exception
-               Attr.ec
-               expand_sig_exception
+module Deriving_private = struct
+  module type Driver = Driver
 
-           (* [@@deriving_inline] *)
-           ; Context_free.Rule.attr_str_type_decl_expect
-               Attr.Expect.td
-               expand_str_type_decls
-           ; Context_free.Rule.attr_sig_type_decl_expect
-               Attr.Expect.td
-               expand_sig_type_decls
-           ; Context_free.Rule.attr_str_type_ext_expect
-               Attr.Expect.te
-               expand_str_type_ext
-           ; Context_free.Rule.attr_sig_type_ext_expect
-               Attr.Expect.te
-               expand_sig_type_ext
-           ; Context_free.Rule.attr_str_exception_expect
-               Attr.Expect.ec
-               expand_str_exception
-           ; Context_free.Rule.attr_sig_exception_expect
-               Attr.Expect.ec
-               expand_sig_exception
-           ]
-;;
+  let init d =
+    driver := Some d;
+    init_args ();
+    (* For backward compatibility *)
+    let (module Driver) = d in
+    Driver.register_transformation "deriving" ~aliases:["type_conv"]
+
+  module Attr_group = struct
+    type ('a, 'b, 'c) unpacked =
+      { attr   : ('b, 'c) Attribute.t
+      ; expand :
+          loc:Location.t
+          -> path:string
+          -> Asttypes.rec_flag
+          -> 'b list
+          -> 'c option list
+          -> 'a list
+      }
+
+    type ('a, 'b) t = T : ('a, 'b, 'c) unpacked -> ('a, 'b) t [@@unboxed]
+  end
+
+  module Attr = struct
+    type ('a, 'b, 'c) unpacked =
+      { attr   : ('b, 'c) Attribute.t
+      ; expand :
+          loc:Location.t
+          -> path:string
+          -> 'b
+          -> 'c
+          -> 'a list
+      }
+
+    type ('a, 'b) t = T : ('a, 'b, 'c) unpacked -> ('a, 'b) t [@@unboxed]
+  end
+
+  let str_type_decl : (_, _) Attr_group.t =
+    T { attr   = Attrs.td
+      ; expand = expand_str_type_decls
+      }
+  let sig_type_decl : (_, _) Attr_group.t =
+    T { attr   = Attrs.td
+      ; expand = expand_sig_type_decls
+      }
+  let str_type_ext : (_, _) Attr.t =
+    T { attr   = Attrs.te
+      ; expand = expand_str_type_ext
+      }
+  let sig_type_ext : (_, _) Attr.t =
+    T { attr   = Attrs.te
+      ; expand = expand_sig_type_ext
+      }
+  let str_exception : (_, _) Attr.t =
+    T { attr   = Attrs.ec
+      ; expand = expand_str_exception
+      }
+  let sig_exception : (_, _) Attr.t =
+    T { attr   = Attrs.ec
+      ; expand = expand_sig_exception
+      }
+
+  let str_type_decl_expect : (_, _) Attr_group.t =
+    T { attr   = Attrs.Expect.td
+      ; expand = expand_str_type_decls
+      }
+  let sig_type_decl_expect : (_, _) Attr_group.t =
+    T { attr   = Attrs.Expect.td
+      ; expand = expand_sig_type_decls
+      }
+  let str_type_ext_expect : (_, _) Attr.t =
+    T { attr   = Attrs.Expect.te
+      ; expand = expand_str_type_ext
+      }
+  let sig_type_ext_expect : (_, _) Attr.t =
+    T { attr   = Attrs.Expect.te
+      ; expand = expand_sig_type_ext
+      }
+  let str_exception_expect : (_, _) Attr.t =
+    T { attr   = Attrs.Expect.ec
+      ; expand = expand_str_exception
+      }
+  let sig_exception_expect : (_, _) Attr.t =
+    T { attr   = Attrs.Expect.ec
+      ; expand = expand_sig_exception
+      }
+end

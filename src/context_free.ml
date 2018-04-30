@@ -8,42 +8,6 @@ module A  = Attribute
 module AC = Attribute.Context
 
 module Rule = struct
-  module Attr_group_inline = struct
-    type ('a, 'b, 'c) unpacked =
-      { attribute : ('b, 'c) Attribute.t
-      ; expect    : bool
-      ; expand    : (loc:Location.t
-                     -> path:string
-                     -> Asttypes.rec_flag
-                     -> 'b list
-                     -> 'c option list
-                     -> 'a list)
-      }
-
-    type ('a, 'b) t = T : ('a, 'b, _) unpacked -> ('a, 'b) t
-
-    let attr_name (T t) = Attribute.name t.attribute
-
-    let split_normal_and_expect l = List.partition_tf l ~f:(fun (T t) -> not t.expect)
-  end
-
-  module Attr_inline = struct
-    type ('a, 'b, 'c) unpacked =
-      { attribute : ('b, 'c) Attribute.t
-      ; expect    : bool
-      ; expand    : (loc:Location.t
-                     -> path:string
-                     -> 'b
-                     -> 'c
-                     -> 'a list)
-      }
-
-    type ('a, 'b) t = T : ('a, 'b, _) unpacked -> ('a, 'b) t
-    let attr_name (T t) = Attribute.name t.attribute
-
-    let split_normal_and_expect l = List.partition_tf l ~f:(fun (T t) -> not t.expect)
-  end
-
   module Special_function = struct
     type t =
       { name   : string
@@ -66,52 +30,21 @@ module Rule = struct
 
   module Field = struct
     type 'a t =
-      | Extension          : Extension.t                                            t
-      | Special_function   : Special_function.t                                     t
-      | Constant           : Constant.t                                             t
-      | Attr_str_type_decl : (structure_item, type_declaration) Attr_group_inline.t t
-      | Attr_sig_type_decl : (signature_item, type_declaration) Attr_group_inline.t t
-      | Attr_str_type_ext  : (structure_item, type_extension) Attr_inline.t         t
-      | Attr_sig_type_ext  : (signature_item, type_extension) Attr_inline.t         t
-      | Attr_str_exception : (structure_item, extension_constructor) Attr_inline.t  t
-      | Attr_sig_exception : (signature_item, extension_constructor) Attr_inline.t  t
+      | Extension          : Extension.t        t
+      | Special_function   : Special_function.t t
+      | Constant           : Constant.t         t
 
     type (_, _) equality = Eq : ('a, 'a) equality | Ne : (_, _) equality
 
     let eq : type a b. a t -> b t -> (a, b) equality = fun a b ->
       match a, b with
-      | Extension          , Extension          -> Eq
-      | Special_function   , Special_function   -> Eq
-      | Constant           , Constant           -> Eq
-      | Attr_str_type_decl , Attr_str_type_decl -> Eq
-      | Attr_sig_type_decl , Attr_sig_type_decl -> Eq
-      | Attr_str_type_ext  , Attr_str_type_ext  -> Eq
-      | Attr_sig_type_ext  , Attr_sig_type_ext  -> Eq
-      | Attr_str_exception , Attr_str_exception -> Eq
-      | Attr_sig_exception , Attr_sig_exception -> Eq
+      | Extension          , Extension        -> Eq
+      | Special_function   , Special_function -> Eq
+      | Constant           , Constant         -> Eq
       | _ -> Ne
   end
 
   type t = T : 'a Field.t * 'a -> t
-
-  type ('a, 'b, 'c) attr_group_inline =
-    ('b, 'c) Attribute.t
-    -> (loc:Location.t
-        -> path:string
-        -> Asttypes.rec_flag
-        -> 'b list
-        -> 'c option list
-        -> 'a list)
-    -> t
-
-  type ('a, 'b, 'c) attr_inline =
-    ('b, 'c) Attribute.t
-    -> (loc:Location.t
-        -> path:string
-        -> 'b
-        -> 'c
-        -> 'a list)
-    -> t
 
   let rec filter : type a. a Field.t -> t list -> a list = fun field l ->
     match l with
@@ -133,54 +66,6 @@ module Rule = struct
 
   let constant kind suffix expand =
     T (Constant, { suffix; kind; expand })
-  ;;
-
-  let attr_str_type_decl attribute expand =
-    T (Attr_str_type_decl, T { attribute; expand; expect = false })
-  ;;
-
-  let attr_sig_type_decl attribute expand =
-    T (Attr_sig_type_decl, T { attribute; expand; expect = false })
-  ;;
-
-  let attr_str_type_ext attribute expand =
-    T (Attr_str_type_ext, T { attribute; expand; expect = false })
-  ;;
-
-  let attr_sig_type_ext attribute expand =
-    T (Attr_sig_type_ext, T { attribute; expand; expect = false })
-  ;;
-
-  let attr_str_exception attribute expand =
-    T (Attr_str_exception, T { attribute; expand; expect = false })
-  ;;
-
-  let attr_sig_exception attribute expand =
-    T (Attr_sig_exception, T { attribute; expand; expect = false })
-  ;;
-
-  let attr_str_type_decl_expect attribute expand =
-    T (Attr_str_type_decl, T { attribute; expand; expect = true })
-  ;;
-
-  let attr_sig_type_decl_expect attribute expand =
-    T (Attr_sig_type_decl, T { attribute; expand; expect = true })
-  ;;
-
-  let attr_str_type_ext_expect attribute expand =
-    T (Attr_str_type_ext, T { attribute; expand; expect = true })
-  ;;
-
-  let attr_sig_type_ext_expect attribute expand =
-    T (Attr_sig_type_ext, T { attribute; expand; expect = true })
-  ;;
-
-  let attr_str_exception_expect attribute expand =
-    T (Attr_str_exception, T { attribute; expand; expect = true })
-  ;;
-
-  let attr_sig_exception_expect attribute expand =
-    T (Attr_sig_exception, T { attribute; expand; expect = true })
   ;;
 end
 
@@ -289,50 +174,19 @@ let rec get_group attr l =
     | Some value , Some vals -> Some (Some value :: vals)
 ;;
 
-(* Same as [List.rev] then [List.concat] but expecting the input to be of length <= 2 *)
-let rev_concat = function
-  | [] -> []
-  | [x] -> x
-  | [x; y] -> y @ x
-  | l -> List.concat (List.rev l)
-;;
+module D = Deriving.Deriving_private
 
-let sort_attr_group_inline l =
-  List.sort l ~compare:(fun a b ->
-    String.compare
-      (Rule.Attr_group_inline.attr_name a)
-      (Rule.Attr_group_inline.attr_name b))
+let handle_deriving_for_type_decls (D.Attr_group.T a) rf items ~loc ~path =
+  match get_group a.attr items with
+  | None -> None
+  | Some values ->
+    Some (a.expand ~loc ~path rf items values)
 
-let sort_attr_inline l =
-  List.sort l ~compare:(fun a b ->
-    String.compare
-      (Rule.Attr_inline.attr_name a)
-      (Rule.Attr_inline.attr_name b))
-
-(* Returns the code generated by attribute handlers. We don't remove these attributes, as
-   another pass might interpret them later. For instance both ppx_deriving and
-   ppxlib_deriving interprets [@@deriving] attributes.
-
-   This complexity is horrible, but in practice we don't care as [attrs] is always a list
-   of one element; it only has [@@deriving].
-*)
-let handle_attr_group_inline attrs rf items ~loc ~path =
-  List.fold_left attrs ~init:[]
-    ~f:(fun acc (Rule.Attr_group_inline.T group) ->
-      match get_group group.attribute items with
-      | None -> acc
-      | Some values ->
-        let expect_items = group.expand ~loc ~path rf items values in
-        expect_items :: acc)
-
-let handle_attr_inline attrs item ~loc ~path =
-  List.fold_left attrs ~init:[]
-    ~f:(fun acc (Rule.Attr_inline.T a) ->
-      match Attribute.get a.attribute item with
-      | None -> acc
-      | Some value ->
-        let expect_items = a.expand ~loc ~path item value in
-        expect_items :: acc)
+let handle_deriving (D.Attr.T a) item ~loc ~path =
+  match Attribute.get a.attr item with
+  | None -> None
+  | Some value ->
+    Some (a.expand ~loc ~path item value)
 
 module Expect_mismatch_handler = struct
   type t =
@@ -365,39 +219,6 @@ class map_top_down ?(expect_mismatch_handler=Expect_mismatch_handler.nop)
   and pattern          = E.filter_by_context EC.pattern          extensions
   and signature_item   = E.filter_by_context EC.signature_item   extensions
   and structure_item   = E.filter_by_context EC.structure_item   extensions
-  in
-
-  let attr_str_type_decls, attr_str_type_decls_expect =
-    Rule.filter Attr_str_type_decl rules
-    |> sort_attr_group_inline
-    |> Rule.Attr_group_inline.split_normal_and_expect
-  in
-  let attr_sig_type_decls, attr_sig_type_decls_expect =
-    Rule.filter Attr_sig_type_decl rules
-    |> sort_attr_group_inline
-    |> Rule.Attr_group_inline.split_normal_and_expect
-  in
-
-  let attr_str_type_exts, attr_str_type_exts_expect =
-    Rule.filter Attr_str_type_ext rules
-    |> sort_attr_inline
-    |> Rule.Attr_inline.split_normal_and_expect
-  in
-  let attr_sig_type_exts, attr_sig_type_exts_expect =
-    Rule.filter Attr_sig_type_ext rules
-    |> sort_attr_inline
-    |> Rule.Attr_inline.split_normal_and_expect
-  in
-
-  let attr_str_exceptions, attr_str_exceptions_expect =
-    Rule.filter Attr_str_exception rules
-    |> sort_attr_inline
-    |> Rule.Attr_inline.split_normal_and_expect
-  in
-  let attr_sig_exceptions, attr_sig_exceptions_expect =
-    Rule.filter Attr_sig_exception rules
-    |> sort_attr_inline
-    |> Rule.Attr_inline.split_normal_and_expect
   in
 
   let map_node  = map_node  ~hook in
@@ -522,20 +343,23 @@ class map_top_down ?(expect_mismatch_handler=Expect_mismatch_handler.nop)
     method! structure path st =
       let rec with_extra_items item ~extra_items ~expect_items ~rest ~in_generated_code =
         let item = super#structure_item path item in
-        let extra_items = loop (rev_concat extra_items) ~in_generated_code:true in
+        let extra_items =
+          match extra_items with
+          | None -> []
+          | Some l -> loop l ~in_generated_code:true
+        in
         if not in_generated_code then
           Generated_code_hook.insert_after hook Structure_item item.pstr_loc
             (Many extra_items);
         let rest = loop rest ~in_generated_code in
-        (match expect_items with
-        | [] -> ()
-        | _ ->
-          let expected = rev_concat expect_items in
+        match expect_items with
+        | None -> item :: rest
+        | Some expected ->
           let pos = item.pstr_loc.loc_end in
           Code_matcher.match_structure rest ~pos ~expected
             ~mismatch_handler:(fun loc repl ->
-              expect_mismatch_handler.f Structure_item loc repl));
-        item :: (extra_items @ rest)
+              expect_mismatch_handler.f Structure_item loc repl);
+          item :: (expected @ rest)
       and loop st ~in_generated_code =
         match st with
         | [] -> []
@@ -560,24 +384,24 @@ class map_top_down ?(expect_mismatch_handler=Expect_mismatch_handler.nop)
 
           | Pstr_type(rf, tds) ->
             let extra_items =
-              handle_attr_group_inline attr_str_type_decls rf tds ~loc ~path
+              handle_deriving_for_type_decls D.str_type_decl rf tds ~loc ~path
             in
             let expect_items =
-              handle_attr_group_inline attr_str_type_decls_expect rf tds ~loc ~path
+              handle_deriving_for_type_decls D.str_type_decl_expect rf tds ~loc ~path
             in
             with_extra_items item ~extra_items ~expect_items ~rest ~in_generated_code
 
           | Pstr_typext te ->
-            let extra_items = handle_attr_inline attr_str_type_exts te ~loc ~path in
+            let extra_items = handle_deriving D.str_type_ext te ~loc ~path in
             let expect_items =
-              handle_attr_inline attr_str_type_exts_expect te ~loc ~path
+              handle_deriving D.str_type_ext_expect te ~loc ~path
             in
             with_extra_items item ~extra_items ~expect_items ~rest ~in_generated_code
 
           | Pstr_exception ec ->
-            let extra_items = handle_attr_inline attr_str_exceptions ec ~loc ~path in
+            let extra_items = handle_deriving D.str_exception ec ~loc ~path in
             let expect_items =
-              handle_attr_inline attr_str_exceptions_expect ec ~loc ~path
+              handle_deriving D.str_exception_expect ec ~loc ~path
             in
             with_extra_items item ~extra_items ~expect_items ~rest ~in_generated_code
 
@@ -592,20 +416,23 @@ class map_top_down ?(expect_mismatch_handler=Expect_mismatch_handler.nop)
     method! signature path sg =
       let rec with_extra_items item ~extra_items ~expect_items ~rest ~in_generated_code =
         let item = super#signature_item path item in
-        let extra_items = loop (rev_concat extra_items) ~in_generated_code:true in
+        let extra_items =
+          match extra_items with
+          | None -> []
+          | Some l -> loop l ~in_generated_code:true
+        in
         if not in_generated_code then
           Generated_code_hook.insert_after hook Signature_item item.psig_loc
             (Many extra_items);
         let rest = loop rest ~in_generated_code in
-        (match expect_items with
-        | [] -> ()
-        | _ ->
-          let expected = rev_concat expect_items in
+        match expect_items with
+        | None -> item :: rest
+        | Some expected ->
           let pos = item.psig_loc.loc_end in
           Code_matcher.match_signature rest ~pos ~expected
             ~mismatch_handler:(fun loc repl ->
-              expect_mismatch_handler.f Signature_item loc repl));
-        item :: (extra_items @ rest)
+              expect_mismatch_handler.f Signature_item loc repl);
+          item :: (expected @ rest)
       and loop sg ~in_generated_code =
         match sg with
         | [] -> []
@@ -630,24 +457,24 @@ class map_top_down ?(expect_mismatch_handler=Expect_mismatch_handler.nop)
 
           | Psig_type(rf, tds) ->
             let extra_items =
-              handle_attr_group_inline attr_sig_type_decls rf tds ~loc ~path
+              handle_deriving_for_type_decls D.sig_type_decl rf tds ~loc ~path
             in
             let expect_items =
-              handle_attr_group_inline attr_sig_type_decls_expect rf tds ~loc ~path
+              handle_deriving_for_type_decls D.sig_type_decl_expect rf tds ~loc ~path
             in
             with_extra_items item ~extra_items ~expect_items ~rest ~in_generated_code
 
           | Psig_typext te ->
-            let extra_items = handle_attr_inline attr_sig_type_exts te ~loc ~path in
+            let extra_items = handle_deriving D.sig_type_ext te ~loc ~path in
             let expect_items =
-              handle_attr_inline attr_sig_type_exts_expect te ~loc ~path
+              handle_deriving D.sig_type_ext_expect te ~loc ~path
             in
             with_extra_items item ~extra_items ~expect_items ~rest ~in_generated_code
 
           | Psig_exception ec ->
-            let extra_items = handle_attr_inline attr_sig_exceptions ec ~loc ~path in
+            let extra_items = handle_deriving D.sig_exception ec ~loc ~path in
             let expect_items =
-              handle_attr_inline attr_sig_exceptions_expect ec ~loc ~path
+              handle_deriving D.sig_exception_expect ec ~loc ~path
             in
             with_extra_items item ~extra_items ~expect_items ~rest ~in_generated_code
 

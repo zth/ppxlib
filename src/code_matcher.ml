@@ -5,7 +5,6 @@ module Format = Caml.Format
 
 module Filename = Caml.Filename
 
-(* TODO: make the "deriving." depend on the matching attribute name. *)
 let end_marker_sig =
   Attribute.Floating.declare "deriving.end" Signature_item Ast_pattern.(pstr nil) ()
 let end_marker_str =

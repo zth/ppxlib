@@ -110,3 +110,67 @@ val add_alias
 (** Ignore a deriver. So that one can write: [Deriving.add ... |>
     Deriving.ignore] *)
 val ignore : t -> unit
+
+(**/**)
+
+module Deriving_private : sig
+  module type Driver = sig
+    val add_arg : Caml.Arg.key -> Caml.Arg.spec -> doc:string -> unit
+    val pretty : unit -> bool
+
+    val register_transformation
+      :  ?extensions : Extension.t list
+      -> ?aliases    : string list
+      -> string
+      -> unit
+  end
+
+  val init : (module Driver) -> unit
+
+  module Attr_group : sig
+    type ('a, 'b, 'c) unpacked =
+      { attr   : ('b, 'c) Attribute.t
+      ; expand :
+          loc:Location.t
+          -> path:string
+          -> Asttypes.rec_flag
+          -> 'b list
+          -> 'c option list
+          -> 'a list
+      }
+
+    type ('a, 'b) t = T : ('a, 'b, 'c) unpacked -> ('a, 'b) t [@@unboxed]
+  end
+
+  module Attr : sig
+    type ('a, 'b, 'c) unpacked =
+      { attr   : ('b, 'c) Attribute.t
+      ; expand :
+          loc:Location.t
+          -> path:string
+          -> 'b
+          -> 'c
+          -> 'a list
+      }
+
+    type ('a, 'b) t = T : ('a, 'b, 'c) unpacked -> ('a, 'b) t [@@unboxed]
+  end
+
+  val str_type_decl : (structure_item, type_declaration) Attr_group.t
+  val sig_type_decl : (signature_item, type_declaration) Attr_group.t
+
+  val str_type_decl_expect : (structure_item, type_declaration) Attr_group.t
+  val sig_type_decl_expect : (signature_item, type_declaration) Attr_group.t
+
+  val str_type_ext : (structure_item, type_extension) Attr.t
+  val sig_type_ext : (signature_item, type_extension) Attr.t
+
+  val str_type_ext_expect : (structure_item, type_extension) Attr.t
+  val sig_type_ext_expect : (signature_item, type_extension) Attr.t
+
+  val str_exception : (structure_item, extension_constructor) Attr.t
+  val sig_exception : (signature_item, extension_constructor) Attr.t
+
+  val str_exception_expect : (structure_item, extension_constructor) Attr.t
+  val sig_exception_expect : (signature_item, extension_constructor) Attr.t
+end
