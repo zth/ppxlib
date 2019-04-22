@@ -1,4 +1,4 @@
 (library
  (name stdppxlib)
  (public_name ppxlib._stdppxlib)
- (libraries ppxlib_caml))
+ (libraries ppxlib_caml sexplib))

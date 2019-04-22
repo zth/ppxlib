@@ -48,7 +48,7 @@ let split_path =
 module Pattern = struct
   module Str = struct
     type t = string
-    let sexp_of_t = String.sexp_of_t
+    let sexp_of_t = Sexplib.Std.sexp_of_string
     let compare a b =
       let d = Int.compare (String.length a) (String.length b) in
       if d <> 0 then

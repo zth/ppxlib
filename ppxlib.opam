@@ -20,6 +20,7 @@ depends: [
   "ocaml-migrate-parsetree" {>= "1.0.9"}
   "ppx_derivers"            {>= "1.0"}
   "stdio"                   {>= "v0.11.0"}
+  "sexplib"
   "ocamlfind"               {with-test}
 ]
 synopsis: "Base library and tools for ppx rewriters"
