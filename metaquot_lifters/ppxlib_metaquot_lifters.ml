@@ -1,4 +1,4 @@
-open Base
+open! Stdppxlib
 open Ppxlib
 open Ast_builder.Default
 
