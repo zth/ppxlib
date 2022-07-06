@@ -122,6 +122,7 @@ module Reserved_namespaces = struct
   let () = reserve "metaocaml"
   let () = reserve "ocamlformat"
   let () = reserve "ns"
+  let () = reserve "res"
 
   let is_in_reserved_namespaces name =
     match get_outer_namespace name with
